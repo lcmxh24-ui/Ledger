@@ -111,10 +111,36 @@
   /* 统计 */
   .month-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .month-bar span { font-size: 17px; letter-spacing: 2px; color: var(--moss-dark); font-weight: bold; }
-  .total { text-align: center; padding: 6px 0 14px; margin-bottom: 14px; }
-  .total::after { content: "—— ❧ ——"; display: block; color: var(--gold-dark); font-size: 13px; margin-top: 8px; }
-  .total .label { font-size: 12px; letter-spacing: 4px; color: var(--brown); }
-  .total .num { font-family: Georgia, "Times New Roman", serif; font-size: 36px; color: var(--wine); letter-spacing: 1px; text-shadow: 0 1px 0 #fff8e4, 0 2px 0 rgba(138,107,20,.35); }
+  /* 余额 + 本月收支 */
+  .balance { text-align: center; padding: 4px 0 10px; }
+  .balance .label, .sub-totals .label { display: block; font-size: 12px; letter-spacing: 4px; color: var(--brown); margin-bottom: 2px; }
+  .bal-num {
+    font-family: Georgia, "Times New Roman", serif; font-size: 36px; letter-spacing: 1px;
+    color: var(--moss-dark); text-shadow: 0 1px 0 #fff8e4, 0 2px 0 rgba(138,107,20,.35);
+  }
+  .bal-num.neg { color: var(--wine); }   /* 余额为负时变红 */
+  .sub-totals {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;
+    padding: 10px 0 14px; margin-bottom: 14px; border-top: 1px dotted var(--gold-dark);
+  }
+  .sub-totals::after { content: "—— ❧ ——"; grid-column: 1 / -1; color: var(--gold-dark); font-size: 13px; }
+  .sub-totals b { font-family: Georgia, serif; font-size: 20px; font-weight: normal; }
+  .sub-totals .in { color: var(--moss); }
+  .sub-totals .out { color: var(--wine); }
+
+  /* 收入/支出切换 */
+  .type-toggle {
+    display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 14px;
+    border: 1px solid var(--gold-dark); border-radius: 3px; overflow: hidden;
+  }
+  .type-btn {
+    font: inherit; font-size: 14px; letter-spacing: 6px; padding: 8px; border: none; cursor: pointer;
+    background: linear-gradient(#f8f0da, var(--paper-2)); color: var(--ink);
+  }
+  .type-btn + .type-btn { border-left: 1px solid var(--gold-dark); }
+  .type-btn[data-type="out"][aria-pressed="true"] { background: linear-gradient(#8a2a3a, var(--wine)); color: var(--paper); }
+  .type-btn[data-type="in"][aria-pressed="true"]  { background: linear-gradient(var(--moss), var(--moss-dark)); color: var(--paper); }
+  .item .money.in { color: var(--moss); }
   .stat-row { display: grid; grid-template-columns: 96px 1fr 82px; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 9px; }
   .stat-track { height: 10px; background: var(--paper-2); border: 1px solid var(--gold-dark); border-radius: 5px; overflow: hidden; }
   .stat-fill { height: 100%; border-radius: 5px; }
@@ -193,9 +219,13 @@
       <span id="monthLabel"></span>
       <button class="btn small ghost" id="nextM" aria-label="下个月">▶</button>
     </div>
-    <div class="total">
-      <div class="label" id="statTitle">本月支出</div>
-      <div class="num" id="totalNum">¥0.00</div>
+     <div class="balance">
+      <div class="label">当前余额</div>
+      <div class="bal-num" id="balanceNum">¥0.00</div>
+    </div>
+    <div class="sub-totals">
+      <div><span class="label">本月收入</span><b class="in" id="incomeNum">¥0.00</b></div>
+      <div><span class="label" id="statTitle">本月支出</span><b class="out" id="totalNum">¥0.00</b></div>
     </div>
     <div id="stats"></div>
   </section>
@@ -204,6 +234,10 @@
     <span class="corner-b" aria-hidden="true"></span>
     <h2>记一笔</h2>
     <form id="form">
+      <div class="type-toggle" role="group" aria-label="收支类型">
+        <button type="button" class="type-btn" data-type="out" aria-pressed="true">支出</button>
+        <button type="button" class="type-btn" data-type="in" aria-pressed="false">收入</button>
+      </div>
       <label id="catLabel">分类</label>
       <div class="cats" id="cats" role="group" aria-labelledby="catLabel"></div>
       <div class="row2">
@@ -248,12 +282,23 @@ const CATS = [
   { id: 'merch',   name: '周边',      ic: '★', color: '#a8655f' },
   { id: 'mood',    name: 'Happiness', ic: '♥', color: '#b9837f' },
   { id: 'daily',   name: '生活',      ic: '⌂', color: '#4a5d23' },
-  { id: 'vip',     name: '会员订阅',  ic: '♛', color: '#c9a227' },
+  { id: 'vip',     name: '会员',  ic: '♛', color: '#c9a227' },
   { id: 'ai',      name: 'API',       ic: '◈', color: '#3f6b5e' },
   { id: 'traffic', name: '交通',      ic: '➤', color: '#8a4a2b' },
   { id: 'other',   name: '其他',      ic: '◆', color: '#5c4033' },
 ];
-const catById = id => CATS.find(c => c.id === (id === 'need' ? 'daily' : id)) || CATS[CATS.length - 1];
+// 收入分类
+const INCOME_CATS = [
+  { id: 'salary',   name: '工资',     ic: '♣', color: '#4a5d23' },
+  { id: 'pocket',   name: '生活费',   ic: '❀', color: '#7a8c4a' },
+  { id: 'gift',     name: '红包',     ic: '✉', color: '#b3263a' },
+  { id: 'init',     name: '初始余额', ic: '⚜', color: '#c9a227' },
+  { id: 'other_in', name: '其他收入', ic: '◇', color: '#3f6b5e' },
+];
+const ALL_CATS = [...CATS, ...INCOME_CATS];
+const catById = id => ALL_CATS.find(c => c.id === (id === 'need' ? 'daily' : id)) || CATS[CATS.length - 1];
+// 旧记录没有 type，一律当支出
+const typeOf = r => r.type === 'in' ? 'in' : 'out';
 
 /* ========== 存储 ========== */
 const KEY = 'pixelLedger_v1';
@@ -264,19 +309,34 @@ const save = () => localStorage.setItem(KEY, JSON.stringify(records));
 
 
 /* ========== 分类按钮 ========== */
+let curType = 'out';
 let selectedCat = CATS[0].id;
 const catsEl = document.getElementById('cats');
-CATS.forEach(c => {
-  const btn = document.createElement('button');
-  btn.type = 'button'; btn.className = 'cat-btn';
-  btn.innerHTML = `<span class="ic" aria-hidden="true">${c.ic}</span>${c.name}`;
-  btn.setAttribute('aria-pressed', c.id === selectedCat);
-  btn.addEventListener('click', () => {
-    selectedCat = c.id;
-    catsEl.querySelectorAll('.cat-btn').forEach((b, i) => b.setAttribute('aria-pressed', CATS[i].id === c.id));
+
+function renderCats() {
+  const list = curType === 'in' ? INCOME_CATS : CATS;
+  if (!list.some(c => c.id === selectedCat)) selectedCat = list[0].id;
+  catsEl.innerHTML = '';
+  list.forEach(c => {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'cat-btn'; btn.dataset.id = c.id;
+    btn.innerHTML = `<span class="ic" aria-hidden="true">${c.ic}</span>${c.name}`;
+    btn.setAttribute('aria-pressed', c.id === selectedCat);
+    btn.addEventListener('click', () => {
+      selectedCat = c.id;
+      catsEl.querySelectorAll('.cat-btn').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === c.id));
+    });
+    catsEl.appendChild(btn);
   });
-  catsEl.appendChild(btn);
-});
+}
+renderCats();
+
+// 切换收入/支出
+document.querySelectorAll('.type-btn').forEach(btn => btn.addEventListener('click', () => {
+  curType = btn.dataset.type;
+  document.querySelectorAll('.type-btn').forEach(b => b.setAttribute('aria-pressed', b === btn));
+  renderCats();
+}));
 
 /* ========== 日期 ========== */
 const pad = n => String(n).padStart(2, '0');
@@ -301,7 +361,7 @@ document.getElementById('form').addEventListener('submit', e => {
   const date = document.getElementById('date').value || today();
   records.push({
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    cat: selectedCat, amount, date,
+    cat: selectedCat, amount, date, type: curType,
     note: document.getElementById('note').value.trim(),
   });
   save();
@@ -313,11 +373,20 @@ document.getElementById('form').addEventListener('submit', e => {
 function render() {
   document.getElementById('monthLabel').textContent = `${viewY} 年 ${viewM} 月`;
   const list = records.filter(r => r.date.startsWith(ym()));
-  const total = list.reduce((s, r) => s + r.amount, 0);
+  const outList = list.filter(r => typeOf(r) === 'out');
+  const total = outList.reduce((s, r) => s + r.amount, 0);
+  const income = list.filter(r => typeOf(r) === 'in').reduce((s, r) => s + r.amount, 0);
   document.getElementById('totalNum').textContent = fmt(total);
+  document.getElementById('incomeNum').textContent = fmt(income);
+
+  // 余额：所有月份累计
+  const balance = records.reduce((s, r) => s + (typeOf(r) === 'in' ? r.amount : -r.amount), 0);
+  const balEl = document.getElementById('balanceNum');
+  balEl.textContent = (balance < 0 ? '-' : '') + fmt(Math.abs(balance));
+  balEl.classList.toggle('neg', balance < 0);
 
   const sums = {};
-  list.forEach(r => { const id = catById(r.cat).id; sums[id] = (sums[id] || 0) + r.amount; });
+  outList.forEach(r => { const id = catById(r.cat).id; sums[id] = (sums[id] || 0) + r.amount; });
   const used = CATS.filter(c => sums[c.id]).sort((a, b) => sums[b.id] - sums[a.id]);
   document.getElementById('stats').innerHTML = used.map(c => {
     const pct = total ? sums[c.id] / total * 100 : 0;
@@ -334,15 +403,15 @@ function render() {
   list.forEach(r => (byDay[r.date] = byDay[r.date] || []).push(r));
   listEl.innerHTML = Object.keys(byDay).sort().reverse().map(d => {
     const items = byDay[d];
-    const daySum = items.reduce((s, r) => s + r.amount, 0);
+    const daySum = items.reduce((s, r) => s + (typeOf(r) === 'in' ? r.amount : -r.amount), 0);
     const [, mm, dd] = d.split('-');
-    return `<div class="day"><span>${+mm} 月 ${+dd} 日</span><span>${fmt(daySum)}</span></div>` +
+    return `<div class="day"><span>${+mm} 月 ${+dd} 日</span><span>${daySum >= 0 ? '+' : '-'}${fmt(Math.abs(daySum))}</span></div>` +
       items.map(r => {
         const c = catById(r.cat);
         return `<div class="item">
           <div class="dot" style="background:${c.color}" aria-hidden="true">${c.ic}</div>
           <div class="info"><b>${c.name}</b><small>${r.note ? esc(r.note) : '—'}</small></div>
-          <span class="money">-${fmt(r.amount)}</span>
+          <span class="money ${typeOf(r)}">${typeOf(r) === 'in' ? '+' : '-'}${fmt(r.amount)}</span>
           <button class="del" data-id="${r.id}" aria-label="删除这条记录">✕</button>
         </div>`;
       }).join('');
@@ -375,7 +444,7 @@ document.getElementById('importFile').onchange = e => {
       const valid = data.filter(r => r && r.id && typeof r.amount === 'number' && /^\d{4}-\d{2}-\d{2}$/.test(r.date));
       const ids = new Set(records.map(r => r.id));
       records = records.concat(valid.filter(r => !ids.has(r.id)).map(r => ({
-        ...r, cat: r.cat === 'need' ? 'daily' : r.cat, note: String(r.note || '')
+        ...r, cat: r.cat === 'need' ? 'daily' : r.cat, type: r.type === 'in' ? 'in' : 'out', note: String(r.note || '')
       })));
       save(); render();
       alert(`导入成功，共 ${valid.length} 条`);
